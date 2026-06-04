@@ -445,9 +445,57 @@ body {
   align-items: center;
   gap: 6px;
 }
+
+/* Motivational overlay */
+.msg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+.msg-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+.msg-overlay.spicy { background: rgba(90, 15, 35, 0.92); }
+.msg-overlay.hype  { background: rgba(27, 60, 8, 0.92); }
+.msg-card {
+  position: relative;
+  text-align: center;
+  padding: 0 16px;
+  max-width: 320px;
+}
+.msg-emoji { font-size: 44px; margin-bottom: 20px; display: block; }
+.msg-text {
+  font-family: var(--serif);
+  font-size: 26px;
+  line-height: 1.35;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.msg-from {
+  margin-top: 20px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 </style>
 </head>
 <body>
+<div class="msg-overlay" id="msg-overlay">
+  <div class="msg-card">
+    <span class="msg-emoji" id="msg-emoji"></span>
+    <div class="msg-text" id="msg-text"></div>
+    <div class="msg-from">— Jake</div>
+  </div>
+</div>
 <div class="shell">
   <div class="header">
     <div class="header-row">
@@ -474,6 +522,105 @@ body {
 </nav>
 
 <script>
+
+// ── Message pool ───────────────────────────────────────────────────────────
+const MESSAGES = [
+  // Spicy (type: 'spicy')
+  { text: "You know I'm thinking about how good you look right now.", type: 'spicy', emoji: '🔥' },
+  { text: "You have no idea how bad I want you.", type: 'spicy', emoji: '😏' },
+  { text: "I love you and I am very, very into you.", type: 'spicy', emoji: '❤️' },
+  { text: "Break a sweat now and we'll definitely be breaking a sweat later.", type: 'spicy', emoji: '😈' },
+  { text: "I can't wait to get my hands on you.", type: 'spicy', emoji: '🔥' },
+  { text: "You're a Wildwood 10.", type: 'spicy', emoji: '💯' },
+  { text: "I love your body.", type: 'spicy', emoji: '😍' },
+  { text: "Send progress pics. 😈", type: 'spicy', emoji: '📸' },
+  { text: "I bet you look amazing right now and I wish I was there.", type: 'spicy', emoji: '😏' },
+  { text: "For the record, I find you extremely attractive.", type: 'spicy', emoji: '🔥' },
+  { text: "Hot. Just... hot.", type: 'spicy', emoji: '🌶️' },
+  { text: "I'm your husband and I endorse this body.", type: 'spicy', emoji: '✅' },
+  { text: "I cannot wait to take your clothes off this weekend.", type: 'spicy', emoji: '😈' },
+  { text: "You're going to owe me nothing but I'm going to want everything.", type: 'spicy', emoji: '🔥' },
+  { text: "The anticipation is killing me.", type: 'spicy', emoji: '😩' },
+  { text: "I have very specific plans for that body.", type: 'spicy', emoji: '😏' },
+  { text: "Every time I picture you doing this I have to sit down.", type: 'spicy', emoji: '🥵' },
+  { text: "You're going to need a shower. I volunteer.", type: 'spicy', emoji: '🚿' },
+  { text: "I want you so bad it's actually embarrassing.", type: 'spicy', emoji: '😳' },
+  { text: "Strong, sweaty, and all mine. Yes please.", type: 'spicy', emoji: '🔥' },
+  { text: "You're my puzzle piece and I'm trying to fit my piece in your puzzle.", type: 'spicy', emoji: '🧩' },
+  // Hype / playful (type: 'hype')
+  { text: "Let's go, Genny!", type: 'hype', emoji: '💪' },
+  { text: "Get after it.", type: 'hype', emoji: '🏃‍♀️' },
+  { text: "You got this.", type: 'hype', emoji: '✊' },
+  { text: "You're an animal.", type: 'hype', emoji: '🐆' },
+  { text: "That's my girl.", type: 'hype', emoji: '🙌' },
+  { text: "Absolutely locked in.", type: 'hype', emoji: '🔒' },
+  { text: "No days off. Well, some days off. But not today.", type: 'hype', emoji: '📅' },
+  { text: "Was that as hard as you're pretending it was?", type: 'hype', emoji: '🤨' },
+  { text: "Pretty sure that looked easier than you're making it seem.", type: 'hype', emoji: '😏' },
+  { text: "You're doing this and I'm very smug about it.", type: 'hype', emoji: '😌' },
+  { text: "Genny Waldman, you absolute unit.", type: 'hype', emoji: '💪' },
+  { text: "Don't make that face, you loved it.", type: 'hype', emoji: '😂' },
+  { text: "Okay but did you even break a sweat or are you just dramatic.", type: 'hype', emoji: '🎭' },
+  { text: "I'm not saying I called it but I definitely called it.", type: 'hype', emoji: '😏' },
+  { text: "Look at you. Just... look at you.", type: 'hype', emoji: '👀' },
+  { text: "You're kind of a big deal and I think you know it.", type: 'hype', emoji: '⭐' },
+  { text: "Honestly embarrassing how good you are at this.", type: 'hype', emoji: '🫣' },
+  { text: "You make it look easy and I love that for you.", type: 'hype', emoji: '😎' },
+  { text: "I love watching you be good at things.", type: 'hype', emoji: '🥹' },
+];
+
+// Pick a message that hasn't shown in the last 7 days
+// Spicy messages show roughly 1 in 4 times
+function pickMessage() {
+  const shown = load('sf_shown_msgs', []);
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recentIds = shown.filter(e => e.ts > sevenDaysAgo).map(e => e.id);
+
+  const useSpicy = Math.random() < 0.25;
+  const pool = MESSAGES.filter((m, i) => !recentIds.includes(i) && (useSpicy ? m.type === 'spicy' : m.type === 'hype'));
+  // fallback: if pool is empty (all shown recently), open it up
+  const fallback = MESSAGES.filter((m, i) => useSpicy ? m.type === 'spicy' : m.type === 'hype');
+  const candidates = pool.length > 0 ? pool : fallback;
+
+  const msg = candidates[Math.floor(Math.random() * candidates.length)];
+  const id = MESSAGES.indexOf(msg);
+
+  // Record it
+  shown.push({ id, ts: Date.now() });
+  // Keep only last 60 entries
+  if (shown.length > 60) shown.splice(0, shown.length - 60);
+  save('sf_shown_msgs', shown);
+
+  return msg;
+}
+
+let msgTimer = null;
+
+function showMessage() {
+  const msg = pickMessage();
+  const overlay = document.getElementById('msg-overlay');
+  document.getElementById('msg-emoji').textContent = msg.emoji;
+  document.getElementById('msg-text').textContent = msg.text;
+  overlay.className = 'msg-overlay ' + msg.type;
+
+  // Fade in
+  requestAnimationFrame(() => {
+    overlay.classList.add('visible');
+  });
+
+  // Auto-dismiss after 4 seconds
+  if (msgTimer) clearTimeout(msgTimer);
+  msgTimer = setTimeout(() => {
+    overlay.classList.remove('visible');
+  }, 4000);
+
+  // Tap to dismiss early
+  overlay.onclick = () => {
+    if (msgTimer) clearTimeout(msgTimer);
+    overlay.classList.remove('visible');
+  };
+}
+
 // ── Program data ───────────────────────────────────────────────────────────
 // Three days all drawing from the same 5 military calisthenics exercises,
 // with different emphasis/volume. Day C = the full circuit (the "test day").
@@ -749,6 +896,10 @@ function toggleSet(exId, setIdx) {
       prog[ck + '_t_' + todayKey()] = 1;
       prog[ck + '_n'] = (prog[ck + '_n'] || 0) + 1;
       save('sf_progressions', prog);
+    }
+    // Only fire message when checking the final set (not unchecking)
+    if (log[k][exId][setIdx] === true) {
+      showMessage();
     }
   }
   render();
